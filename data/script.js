@@ -56,6 +56,7 @@
         $('#custom_hostname_enable').on('change', toggleCustomHostnameSettings);
         $('#custom_nodatatimer_enable').on('change', toggleCustomNoDataSettings);
         $('#open_wifi_network').on('change', toggleWifiPasswordField);
+        $('.btn-password-toggle').on('click', togglePasswordVisibility);
 
     }
 
@@ -93,7 +94,7 @@
         const isChecked = $('#custom_hostname_enable').is(':checked');
         $('#custom_hostname_settings').toggleClass('d-none', !isChecked);
     }
-    
+
     function toggleCustomNoDataSettings() {
         const isChecked = $('#custom_nodatatimer_enable').is(':checked');
         $('#custom_nodatatimer_settings').toggleClass('d-none', !isChecked);
@@ -102,7 +103,7 @@
     function toggleWifiPasswordField() {
         const isChecked = $('#open_wifi_network').is(':checked');
         const passwordField = $('#wifi_password');
-        
+
         if (isChecked) {
             // Clear and disable the password field when open network is selected
             passwordField.val('').prop('disabled', true).removeClass('is-invalid').addClass('is-valid');
@@ -111,6 +112,23 @@
             passwordField.prop('disabled', false);
         }
         validate(passwordField, wifiPasswordValidationPatternSelector());
+    }
+
+    function togglePasswordVisibility(e) {
+        e.preventDefault();
+        const btn = $(e.currentTarget);
+        const targetSelector = btn.data('target');
+        if (!targetSelector) return;
+        const passwordField = $(targetSelector);
+        if (!passwordField || passwordField.length === 0) return;
+
+        if (passwordField.attr('type') === 'password') {
+            passwordField.attr('type', 'text');
+            btn.html('<i class="bi bi-eye-slash"></i>');
+        } else {
+            passwordField.attr('type', 'password');
+            btn.html('<i class="bi bi-eye"></i>');
+        }
     }
 
     function tryAlarm(e) {
@@ -132,7 +150,6 @@
         }
 
         tryAlarmUrl = clockHost + tryAlarmUrl;
-        
 
         fetch(tryAlarmUrl, {
             method: "POST",
@@ -241,11 +258,11 @@
 
         let url = "/api/llu/patients";
         url = clockHost + url;
-        
+
         console.log("Polling patients list from LibreLink Up...");
         fetch(url, {
             method: "GET",
-            headers: { },
+            headers: {},
             timeout: 1000,
         }).then(function (res) {
             if (res?.ok) {
@@ -682,7 +699,7 @@
         json['custom_hostname_enable'] = $('#custom_hostname_enable').is(':checked');
         json['custom_hostname'] = $('#custom_hostname').val();
 
-         // Custom No Data Timer
+        // Custom No Data Timer
         json['custom_nodatatimer_enable'] = $('#custom_nodatatimer_enable').is(':checked');
         json['custom_nodatatimer'] = $('#custom_nodatatimer').val();
 
@@ -719,7 +736,7 @@
 
         saveUrl = clockHost + saveUrl;
         resetUrl = clockHost + resetUrl;
-        
+
         fetch(saveUrl, {
             method: "POST",
             headers: {
@@ -783,8 +800,8 @@
 
     function validate(field, regex) {
         try {
-        var result = setElementValidity(field, regex.test(field.val()));
-        return result;
+            var result = setElementValidity(field, regex.test(field.val()));
+            return result;
         } catch (ex) {
             console.error(ex);
         }
@@ -878,7 +895,7 @@
         //WiFi
         $('#ssid').val(json['ssid']);
         $('#wifi_password').val(json['password']);
-        
+
         // Check open_wifi_network if password is empty
         if ((!json['password'] || json['password'].trim() === '') && json['ssid'] && json['ssid'].length > 0) {
             $('#open_wifi_network').prop('checked', true);
@@ -977,14 +994,14 @@
         $('#custom_hostname').val(json['custom_hostname']);
         toggleCustomHostnameSettings();
 
-         // Custom No Data Timer
+        // Custom No Data Timer
         $('#custom_nodatatimer_enable').prop('checked', json['custom_nodatatimer_enable']);
         const nodatatimer = json['custom_nodatatimer'];
-        patterns.custom_nodatatimer.test(nodatatimer) ? $('#custom_nodatatimer').val(nodatatimer) 
+        patterns.custom_nodatatimer.test(nodatatimer) ? $('#custom_nodatatimer').val(nodatatimer)
             : $('#custom_nodatatimer').val();
 
         toggleCustomNoDataSettings();
-        
+
     }
 
     function loadAlarmDataFromJson(json, alarmType) {
@@ -1018,49 +1035,49 @@
 
     function displayVersionInfo() {
 
-    // Version info logic
+        // Version info logic
 
-    let versionUrl = "/version.txt?";
-    versionUrl = clockHost + "/version.txt?";
+        let versionUrl = "/version.txt?";
+        versionUrl = clockHost + "/version.txt?";
 
-    fetch(versionUrl + Date.now())
-        .then(res => {
-            if (!res.ok) throw new Error('Failed to fetch current version');
-            return res.text();
-        })
-        .then(currentVersion => {
-            currentVersion = currentVersion.trim();
-            if (!currentVersion) throw new Error('Current version is empty');
-            $('#current_version').text(currentVersion);
-            fetch('https://raw.githubusercontent.com/ktomy/nightscout-clock/refs/heads/main/data/version.txt?' + Date.now())
-                .then(res => {
-                    if (!res.ok) throw new Error('Failed to fetch latest version');
-                    return res.text();
-                })
-                .then(latestVersion => {
-                    latestVersion = latestVersion.trim();
-                    if (!latestVersion) throw new Error('Latest version is empty');
-                    $('#latest_version').text(latestVersion);
-                    if (compareVersions(currentVersion, latestVersion) < 0) {
-                        $('#update_status').html(' <a href="https://github.com/ktomy/nightscout-clock/tree/main?tab=readme-ov-file#changes" target="_blank">Changes</a>');
-                        $('#update_link').removeClass('d-none');
-                    } else {
-                        $('#update_status').text('You are using the latest version.');
+        fetch(versionUrl + Date.now())
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to fetch current version');
+                return res.text();
+            })
+            .then(currentVersion => {
+                currentVersion = currentVersion.trim();
+                if (!currentVersion) throw new Error('Current version is empty');
+                $('#current_version').text(currentVersion);
+                fetch('https://raw.githubusercontent.com/ktomy/nightscout-clock/refs/heads/main/data/version.txt?' + Date.now())
+                    .then(res => {
+                        if (!res.ok) throw new Error('Failed to fetch latest version');
+                        return res.text();
+                    })
+                    .then(latestVersion => {
+                        latestVersion = latestVersion.trim();
+                        if (!latestVersion) throw new Error('Latest version is empty');
+                        $('#latest_version').text(latestVersion);
+                        if (compareVersions(currentVersion, latestVersion) < 0) {
+                            $('#update_status').html(' <a href="https://github.com/ktomy/nightscout-clock/tree/main?tab=readme-ov-file#changes" target="_blank">Changes</a>');
+                            $('#update_link').removeClass('d-none');
+                        } else {
+                            $('#update_status').text('You are using the latest version.');
+                            $('#update_link').addClass('d-none');
+                        }
+                    })
+                    .catch((err) => {
+                        $('#latest_version').text('Error');
+                        $('#update_status').text('Could not check for updates: ' + err.message);
                         $('#update_link').addClass('d-none');
-                    }
-                })
-                .catch((err) => {
-                    $('#latest_version').text('Error');
-                    $('#update_status').text('Could not check for updates: ' + err.message);
-                    $('#update_link').addClass('d-none');
-                });
-        })
-        .catch((err) => {
-            $('#current_version').text('Error');
-            $('#latest_version').text('-');
-            $('#update_status').text('Could not read current version: ' + err.message);
-            $('#update_link').addClass('d-none');
-        });
+                    });
+            })
+            .catch((err) => {
+                $('#current_version').text('Error');
+                $('#latest_version').text('-');
+                $('#update_status').text('Could not read current version: ' + err.message);
+                $('#update_link').addClass('d-none');
+            });
     }
     // Simple version comparison: returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2
     function compareVersions(v1, v2) {
@@ -1111,13 +1128,13 @@
                         case "connected":
                             dataSourceStatusBadge.removeClass().addClass('badge ms-1 ' + green);
                             dataSourceStatusBadge.text('Connected');
-                            break; 
+                            break;
                         case "initialized":
                             dataSourceStatusBadge.removeClass().addClass('badge ms-1 ' + yellow);
                             if (data.isInAPMode == true) {
                                 dataSourceStatusBadge.text('Initial Mode');
                             } else {
-                            dataSourceStatusBadge.text('Connecting');
+                                dataSourceStatusBadge.text('Connecting');
                             }
                             break;
                         default:

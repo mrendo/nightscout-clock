@@ -7,6 +7,7 @@
     <link href="bootstrap.min.css" rel="stylesheet" />
     <!-- <link href="all.min.css" rel="stylesheet"> -->
     <link href="../data_dev/bootstrap.css" rel="stylesheet" />
+    <link href="bootstrap-icons.css" rel="stylesheet" />
     <!-- <link href="../data_dev/all.css" rel="stylesheet"> -->
     <title>Nightscout clock</title>
 </head>
@@ -61,8 +62,19 @@
 
                             <div class="col-sm-6">
                                 <label for="wifi_password" class="form-label">WiFi password</label>
-                                <input type="password" class="form-control" id="wifi_password" placeholder="" value=""
-                                    required />
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="wifi_password" placeholder=""
+                                        value="" required />
+                                    <button class="btn btn-outline-secondary btn-password-toggle" type="button"
+                                        id="toggle_wifi_password_btn" data-target="#wifi_password"
+                                        aria-label="Show or hide WiFi password">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                            fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                            <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8z" />
+                                            <path d="M8 5a3 3 0 100 6 3 3 0 000-6z" />
+                                        </svg>
+                                    </button>
+                                </div>
                                 <div class="invalid-feedback">
                                     Password is required and must be at least 8 characters long
                                 </div>
@@ -135,7 +147,17 @@
                                 </div>
                                 <div class="col-lg-6 col-md-6 col-12 mb-3 mb-md-0">
                                     <label for="medtrum_password" class="form-label">Medtrum password</label>
-                                    <input type="password" class="form-control" id="medtrum_password" />
+                                    <div class="input-group">
+                                        <input type="password" class="form-control" id="medtrum_password" />
+                                        <button class="btn btn-outline-secondary btn-password-toggle" type="button"
+                                            data-target="#medtrum_password" aria-label="Show or hide Medtrum password">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                                fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                                <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8z" />
+                                                <path d="M8 5a3 3 0 100 6 3 3 0 000-6z" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                     <div class="invalid-feedback">
                                         Medtrum password is required
                                     </div>
@@ -159,7 +181,17 @@
                                 </div>
                                 <div class="col-lg-5 col-md-6 col-12 mb-3 mb-md-0">
                                     <label for="dexcom_password" class="form-label">Dexcom password</label>
-                                    <input type="password" class="form-control" id="dexcom_password" />
+                                    <div class="input-group">
+                                        <input type="password" class="form-control" id="dexcom_password" />
+                                        <button class="btn btn-outline-secondary btn-password-toggle" type="button"
+                                            data-target="#dexcom_password" aria-label="Show or hide Dexcom password">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                                fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                                <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8z" />
+                                                <path d="M8 5a3 3 0 100 6 3 3 0 000-6z" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                     <div class="invalid-feedback">
                                         Dexcom password is required
                                     </div>
@@ -222,7 +254,17 @@
                                 <label for="api_secret" class="form-label">API secret
                                     <span class="text-body-secondary">(Only needed when viewing Nightscout data is
                                         protected)</span></label>
-                                <input type="password" class="form-control" id="api_secret" />
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="api_secret" />
+                                    <button class="btn btn-outline-secondary btn-password-toggle" type="button"
+                                        data-target="#api_secret" aria-label="Show or hide API secret">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                            fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                            <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8z" />
+                                            <path d="M8 5a3 3 0 100 6 3 3 0 000-6z" />
+                                        </svg>
+                                    </button>
+                                </div>
                                 <div class="invalid-feedback">
                                     API secret must be at least 12 characters long
                                 </div>
@@ -248,7 +290,18 @@
                                 <div class="col-lg-5 col-md-6 col-12 mb-3 mb-md-0">
                                     <label for="librelinkup_password" class="form-label">LibreLink Up
                                         password</label>
-                                    <input type="password" class="form-control" id="librelinkup_password" />
+                                    <div class="input-group">
+                                        <input type="password" class="form-control" id="librelinkup_password" />
+                                        <button class="btn btn-outline-secondary btn-password-toggle" type="button"
+                                            data-target="#librelinkup_password"
+                                            aria-label="Show or hide LibreLink Up password">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                                fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                                <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8z" />
+                                                <path d="M8 5a3 3 0 100 6 3 3 0 000-6z" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                     <div class="invalid-feedback">
                                         LibreLink Up password is required
                                     </div>
@@ -731,8 +784,19 @@
                             <div class="col-3 d-none" id="additional_wifi_password_cell">
                                 <label for="additional_wifi_password" class="form-label">WiFi
                                     password</label>
-                                <input type="password" class="form-control" id="additional_wifi_password" placeholder=""
-                                    required />
+                                <div class="input-group">
+                                    <input type="password" class="form-control" id="additional_wifi_password"
+                                        placeholder="" required />
+                                    <button class="btn btn-outline-secondary btn-password-toggle" type="button"
+                                        data-target="#additional_wifi_password"
+                                        aria-label="Show or hide additional WiFi password">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                                            fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
+                                            <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8z" />
+                                            <path d="M8 5a3 3 0 100 6 3 3 0 000-6z" />
+                                        </svg>
+                                    </button>
+                                </div>
                                 <div class="invalid-feedback">
                                     Password is required and must be at least 8 characters
                                     long
