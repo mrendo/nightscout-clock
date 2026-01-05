@@ -4,6 +4,12 @@
     'use strict'
 
     let clockHost = "";
+    let authToken = "";
+    let authEnabled = false;
+    let authAuthenticated = false;
+    let authUnauthorizedNotified = false;
+    let webAuthHasPassword = false;
+    let webAuthPassword = "";
 
     if (window.location.href.indexOf("127.0.0.1") > 0) {
         console.log("Setting clock host to lab ESP..");
@@ -27,6 +33,8 @@
         email_format: /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/,
         not_empty: /^.{1,}$/,
         custom_nodatatimer: /^(?:[6-9]|[1-5][0-9]|60)?$/,
+        web_auth_username: /^.{3,32}$/,
+        web_auth_password: /^.{8,64}$/,
 
     };
 
@@ -52,10 +60,14 @@
         $('#btn_urgent_low_alarm_try').on('click', tryAlarm);
         $('#btn_load_limits_from_ns').on('click', loadNightscoutData);
         $("#btn_save").on('click', validateAndSave);
+        $('#btn_auth_login').on('click', loginToWebAuth);
+        $('#btn_auth_logout').on('click', logoutFromWebAuth);
         $('#additional_wifi_enable').on('change', toggleAdditionalWifiSettings);
         $('#custom_hostname_enable').on('change', toggleCustomHostnameSettings);
         $('#custom_nodatatimer_enable').on('change', toggleCustomNoDataSettings);
+        $('#web_auth_enable').on('change', toggleWebAuthSettings);
         $('#open_wifi_network').on('change', toggleWifiPasswordField);
+        $('.btn-password-toggle').on('click', togglePasswordVisibility);
 
     }
 
@@ -93,16 +105,25 @@
         const isChecked = $('#custom_hostname_enable').is(':checked');
         $('#custom_hostname_settings').toggleClass('d-none', !isChecked);
     }
-    
+
     function toggleCustomNoDataSettings() {
         const isChecked = $('#custom_nodatatimer_enable').is(':checked');
         $('#custom_nodatatimer_settings').toggleClass('d-none', !isChecked);
     }
 
+    function toggleWebAuthSettings() {
+        const isChecked = $('#web_auth_enable').is(':checked');
+        $('#web_auth_settings').toggleClass('d-none', !isChecked);
+        if (!isChecked) {
+            clearValidationStatus('web_auth_username');
+            clearValidationStatus('web_auth_password');
+        }
+    }
+
     function toggleWifiPasswordField() {
         const isChecked = $('#open_wifi_network').is(':checked');
         const passwordField = $('#wifi_password');
-        
+
         if (isChecked) {
             // Clear and disable the password field when open network is selected
             passwordField.val('').prop('disabled', true).removeClass('is-invalid').addClass('is-valid');
@@ -111,6 +132,159 @@
             passwordField.prop('disabled', false);
         }
         validate(passwordField, wifiPasswordValidationPatternSelector());
+    }
+
+    function togglePasswordVisibility(e) {
+        e.preventDefault();
+        const btn = $(e.currentTarget);
+        const targetSelector = btn.data('target');
+        if (!targetSelector) return;
+        const passwordField = $(targetSelector);
+        if (!passwordField || passwordField.length === 0) return;
+
+        if (passwordField.attr('type') === 'password') {
+            passwordField.attr('type', 'text');
+            btn.html('<i class="bi bi-eye-slash"></i>');
+        } else {
+            passwordField.attr('type', 'password');
+            btn.html('<i class="bi bi-eye"></i>');
+        }
+    }
+
+    function getAuthHeaders() {
+        if (!authToken) return {};
+        return { 'X-Auth-Token': authToken };
+    }
+
+    function handleUnauthorizedResponse(res) {
+        if (res && res.status === 401) {
+            authAuthenticated = false;
+            updateAuthBanner();
+            if (!authUnauthorizedNotified) {
+                showToastFailure("Error", "Authentication required.");
+                authUnauthorizedNotified = true;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    function setProtectedUiState(isLocked) {
+        $('#btn_save').prop('disabled', isLocked);
+        $('#btn_high_alarm_try').prop('disabled', isLocked);
+        $('#btn_low_alarm_try').prop('disabled', isLocked);
+        $('#btn_urgent_low_alarm_try').prop('disabled', isLocked);
+        $('#save_button').toggleClass('d-none', isLocked);
+    }
+
+    function updateAuthBanner() {
+        if (!authEnabled) {
+            $('#auth_banner').addClass('d-none');
+            setProtectedUiState(false);
+            $('#main_block').removeClass('collapse');
+            return;
+        }
+
+        $('#auth_banner').removeClass('d-none');
+        if (authAuthenticated) {
+            $('#btn_auth_login').addClass('d-none');
+            $('#btn_auth_logout').removeClass('d-none');
+            $('#auth_banner_text').text('Authenticated. Settings and device actions are unlocked.');
+            setProtectedUiState(false);
+            $('#main_block').removeClass('collapse');
+        } else {
+            $('#btn_auth_login').removeClass('d-none');
+            $('#btn_auth_logout').addClass('d-none');
+            $('#auth_banner_text').text('Authentication is enabled. Log in to change settings.');
+            setProtectedUiState(true);
+            $('#main_block').addClass('collapse');
+        }
+    }
+
+    function checkAuthStatus() {
+        return fetch(clockHost + '/api/auth/status', { headers: getAuthHeaders() })
+            .then(res => res.json())
+            .then(data => {
+                authEnabled = data.enabled === true;
+                authAuthenticated = data.authenticated === true;
+                if (authAuthenticated) {
+                    authUnauthorizedNotified = false;
+                }
+                updateAuthBanner();
+            })
+            .catch(error => {
+                console.log(`Auth status error: ${error}`);
+            });
+    }
+
+    function loginToWebAuth() {
+        const username = $('#auth_login_username').val();
+        const password = $('#auth_login_password').val();
+        if (!username || !password) {
+            showToastFailure("Error", "Username and password are required to unlock.");
+            return;
+        }
+
+        fetch(clockHost + '/api/auth/login', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ username, password })
+        })
+            .then(res => {
+                if (res?.ok) {
+                    res.json().then(data => {
+                        if (data.status === "ok" && data.token) {
+                            authToken = data.token;
+                            authAuthenticated = true;
+                            authUnauthorizedNotified = false;
+                            $('#auth_login_password').val('');
+                            updateAuthBanner();
+                            showToastSuccess("Unlocked", "Settings are now unlocked.");
+                        } else if (data.status === "disabled") {
+                            authEnabled = false;
+                            updateAuthBanner();
+                        } else {
+                            showToastFailure("Error", "Invalid credentials.");
+                        }
+                    });
+                } else {
+                    showToastFailure("Error", "Invalid credentials.");
+                }
+            })
+            .catch(error => {
+                console.log(`Auth login error: ${error}`);
+                showToastFailure("Error", "Could not authenticate.");
+            });
+    }
+
+    function logoutFromWebAuth() {
+        fetch(clockHost + '/api/auth/logout', {
+            method: 'POST',
+            headers: {
+                ...getAuthHeaders(),
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            },
+            body: "{}"
+        })
+            .then(res => {
+                if (res?.ok) {
+                    authToken = "";
+                    authAuthenticated = false;
+                    authUnauthorizedNotified = false;
+                    updateAuthBanner();
+                    showToastSuccess("Locked", "Settings are now locked.");
+                } else {
+                    showToastFailure("Error", "Could not lock settings.");
+                }
+            })
+            .catch(error => {
+                console.log(`Auth logout error: ${error}`);
+                showToastFailure("Error", "Could not lock settings.");
+            });
     }
 
     function tryAlarm(e) {
@@ -132,17 +306,20 @@
         }
 
         tryAlarmUrl = clockHost + tryAlarmUrl;
-        
 
         fetch(tryAlarmUrl, {
             method: "POST",
             headers: {
+                ...getAuthHeaders(),
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(requestBody),
         })
             .then(function (res) {
+                if (handleUnauthorizedResponse(res)) {
+                    return;
+                }
                 if (res?.ok) {
                     res.json().then(data => {
                         if (data.status == "ok") {
@@ -223,6 +400,17 @@
         console.log("Validated alarms, result: " + allValid);
         allValid &= validate($('#custom_nodatatimer'), patterns.custom_nodatatimer);
         console.log("Validated custom no data timer, result: " + allValid);
+        if ($('#web_auth_enable').is(':checked')) {
+            allValid &= validate($('#web_auth_username'), patterns.web_auth_username);
+            const passwordField = $('#web_auth_password');
+            const requiresPassword = !webAuthHasPassword || (passwordField.val() || "").length > 0;
+            if (requiresPassword) {
+                allValid &= validate(passwordField, patterns.web_auth_password);
+            } else {
+                clearValidationStatus('web_auth_password');
+            }
+            console.log("Validated web auth, result: " + allValid);
+        }
         return allValid;
     }
 
@@ -241,13 +429,18 @@
 
         let url = "/api/llu/patients";
         url = clockHost + url;
-        
+
         console.log("Polling patients list from LibreLink Up...");
         fetch(url, {
             method: "GET",
-            headers: { },
+            headers: {
+                ...getAuthHeaders(),
+            },
             timeout: 1000,
         }).then(function (res) {
+            if (handleUnauthorizedResponse(res)) {
+                return;
+            }
             if (res?.ok) {
                 res.json().then(data => {
                     patientSelect.empty();
@@ -682,9 +875,19 @@
         json['custom_hostname_enable'] = $('#custom_hostname_enable').is(':checked');
         json['custom_hostname'] = $('#custom_hostname').val();
 
-         // Custom No Data Timer
+        // Custom No Data Timer
         json['custom_nodatatimer_enable'] = $('#custom_nodatatimer_enable').is(':checked');
         json['custom_nodatatimer'] = $('#custom_nodatatimer').val();
+
+        // Web interface authentication
+        json['web_auth_enable'] = $('#web_auth_enable').is(':checked');
+        json['web_auth_username'] = $('#web_auth_username').val();
+        const webAuthPasswordInput = ($('#web_auth_password').val() || "").trim();
+        if (webAuthPasswordInput.length > 0) {
+            json['web_auth_password'] = webAuthPasswordInput;
+        } else if (webAuthPassword.length > 0) {
+            json['web_auth_password'] = webAuthPassword;
+        }
 
         return JSON.stringify(json);
     }
@@ -719,16 +922,20 @@
 
         saveUrl = clockHost + saveUrl;
         resetUrl = clockHost + resetUrl;
-        
+
         fetch(saveUrl, {
             method: "POST",
             headers: {
+                ...getAuthHeaders(),
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
             },
             body: json,
         })
             .then(function (res) {
+                if (handleUnauthorizedResponse(res)) {
+                    return;
+                }
                 if (res?.ok) {
                     res.json().then(data => {
                         if (data.status == "ok") {
@@ -737,6 +944,7 @@
                             fetch(resetUrl, {
                                 method: "POST",
                                 headers: {
+                                    ...getAuthHeaders(),
                                     'Accept': 'application/json',
                                     'Content-Type': 'application/json',
                                 },
@@ -783,8 +991,8 @@
 
     function validate(field, regex) {
         try {
-        var result = setElementValidity(field, regex.test(field.val()));
-        return result;
+            var result = setElementValidity(field, regex.test(field.val()));
+            return result;
         } catch (ex) {
             console.error(ex);
         }
@@ -853,6 +1061,8 @@
                 configJson = configJsonLocal;
                 loadFormData();
 
+                checkAuthStatus();
+
                 $('#main_block').removeClass("collapse");
                 $('#loading_block').addClass("collapse");
 
@@ -878,7 +1088,7 @@
         //WiFi
         $('#ssid').val(json['ssid']);
         $('#wifi_password').val(json['password']);
-        
+
         // Check open_wifi_network if password is empty
         if ((!json['password'] || json['password'].trim() === '') && json['ssid'] && json['ssid'].length > 0) {
             $('#open_wifi_network').prop('checked', true);
@@ -977,14 +1187,25 @@
         $('#custom_hostname').val(json['custom_hostname']);
         toggleCustomHostnameSettings();
 
-         // Custom No Data Timer
+        // Custom No Data Timer
         $('#custom_nodatatimer_enable').prop('checked', json['custom_nodatatimer_enable']);
         const nodatatimer = json['custom_nodatatimer'];
-        patterns.custom_nodatatimer.test(nodatatimer) ? $('#custom_nodatatimer').val(nodatatimer) 
+        patterns.custom_nodatatimer.test(nodatatimer) ? $('#custom_nodatatimer').val(nodatatimer)
             : $('#custom_nodatatimer').val();
 
         toggleCustomNoDataSettings();
-        
+
+        // Web interface authentication
+        webAuthPassword = json['web_auth_password'] || "";
+        webAuthHasPassword = webAuthPassword.length > 0;
+        $('#web_auth_enable').prop('checked', json['web_auth_enable']);
+        $('#web_auth_username').val(json['web_auth_username']);
+        $('#web_auth_password').val(json['web_auth_password']);
+        toggleWebAuthSettings();
+        authEnabled = json['web_auth_enable'] === true;
+        authAuthenticated = false;
+        updateAuthBanner();
+
     }
 
     function loadAlarmDataFromJson(json, alarmType) {
@@ -1018,49 +1239,49 @@
 
     function displayVersionInfo() {
 
-    // Version info logic
+        // Version info logic
 
-    let versionUrl = "/version.txt?";
-    versionUrl = clockHost + "/version.txt?";
+        let versionUrl = "/version.txt?";
+        versionUrl = clockHost + "/version.txt?";
 
-    fetch(versionUrl + Date.now())
-        .then(res => {
-            if (!res.ok) throw new Error('Failed to fetch current version');
-            return res.text();
-        })
-        .then(currentVersion => {
-            currentVersion = currentVersion.trim();
-            if (!currentVersion) throw new Error('Current version is empty');
-            $('#current_version').text(currentVersion);
-            fetch('https://raw.githubusercontent.com/ktomy/nightscout-clock/refs/heads/main/data/version.txt?' + Date.now())
-                .then(res => {
-                    if (!res.ok) throw new Error('Failed to fetch latest version');
-                    return res.text();
-                })
-                .then(latestVersion => {
-                    latestVersion = latestVersion.trim();
-                    if (!latestVersion) throw new Error('Latest version is empty');
-                    $('#latest_version').text(latestVersion);
-                    if (compareVersions(currentVersion, latestVersion) < 0) {
-                        $('#update_status').html(' <a href="https://github.com/ktomy/nightscout-clock/tree/main?tab=readme-ov-file#changes" target="_blank">Changes</a>');
-                        $('#update_link').removeClass('d-none');
-                    } else {
-                        $('#update_status').text('You are using the latest version.');
+        fetch(versionUrl + Date.now())
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to fetch current version');
+                return res.text();
+            })
+            .then(currentVersion => {
+                currentVersion = currentVersion.trim();
+                if (!currentVersion) throw new Error('Current version is empty');
+                $('#current_version').text(currentVersion);
+                fetch('https://raw.githubusercontent.com/ktomy/nightscout-clock/refs/heads/main/data/version.txt?' + Date.now())
+                    .then(res => {
+                        if (!res.ok) throw new Error('Failed to fetch latest version');
+                        return res.text();
+                    })
+                    .then(latestVersion => {
+                        latestVersion = latestVersion.trim();
+                        if (!latestVersion) throw new Error('Latest version is empty');
+                        $('#latest_version').text(latestVersion);
+                        if (compareVersions(currentVersion, latestVersion) < 0) {
+                            $('#update_status').html(' <a href="https://github.com/ktomy/nightscout-clock/tree/main?tab=readme-ov-file#changes" target="_blank">Changes</a>');
+                            $('#update_link').removeClass('d-none');
+                        } else {
+                            $('#update_status').text('You are using the latest version.');
+                            $('#update_link').addClass('d-none');
+                        }
+                    })
+                    .catch((err) => {
+                        $('#latest_version').text('Error');
+                        $('#update_status').text('Could not check for updates: ' + err.message);
                         $('#update_link').addClass('d-none');
-                    }
-                })
-                .catch((err) => {
-                    $('#latest_version').text('Error');
-                    $('#update_status').text('Could not check for updates: ' + err.message);
-                    $('#update_link').addClass('d-none');
-                });
-        })
-        .catch((err) => {
-            $('#current_version').text('Error');
-            $('#latest_version').text('-');
-            $('#update_status').text('Could not read current version: ' + err.message);
-            $('#update_link').addClass('d-none');
-        });
+                    });
+            })
+            .catch((err) => {
+                $('#current_version').text('Error');
+                $('#latest_version').text('-');
+                $('#update_status').text('Could not read current version: ' + err.message);
+                $('#update_link').addClass('d-none');
+            });
     }
     // Simple version comparison: returns -1 if v1 < v2, 0 if equal, 1 if v1 > v2
     function compareVersions(v1, v2) {
@@ -1111,13 +1332,13 @@
                         case "connected":
                             dataSourceStatusBadge.removeClass().addClass('badge ms-1 ' + green);
                             dataSourceStatusBadge.text('Connected');
-                            break; 
+                            break;
                         case "initialized":
                             dataSourceStatusBadge.removeClass().addClass('badge ms-1 ' + yellow);
                             if (data.isInAPMode == true) {
                                 dataSourceStatusBadge.text('Initial Mode');
                             } else {
-                            dataSourceStatusBadge.text('Connecting');
+                                dataSourceStatusBadge.text('Connecting');
                             }
                             break;
                         default:

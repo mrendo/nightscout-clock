@@ -5,6 +5,7 @@
 #include <ESPAsyncWebServer.h>
 #include <LittleFS.h>
 #include <WiFi.h>
+#include <esp_system.h>
 
 #include "BGSourceManager.h"
 #include "DisplayManager.h"
@@ -61,6 +62,48 @@ String ServerManager_::getHostname() {
     DEBUG_PRINTF("Hostname: %s\n", hostname.c_str());
 
     return hostname;
+}
+
+bool ServerManager_::isWebAuthEnabled() const {
+    return SettingsManager.settings.web_auth_enable &&
+           SettingsManager.settings.web_auth_username.length() > 0 &&
+           SettingsManager.settings.web_auth_password.length() > 0;
+}
+
+bool ServerManager_::isRequestAuthenticated(AsyncWebServerRequest* request) const {
+    if (!isWebAuthEnabled()) {
+        return false;
+    }
+
+    if (webAuthToken.length() == 0) {
+        return false;
+    }
+
+    if (!request->hasHeader("X-Auth-Token")) {
+        return false;
+    }
+
+    return request->getHeader("X-Auth-Token")->value() == webAuthToken;
+}
+
+String ServerManager_::generateAuthToken() {
+    uint32_t part1 = esp_random();
+    uint32_t part2 = esp_random();
+    uint32_t part3 = millis();
+    return String(part1, HEX) + String(part2, HEX) + String(part3, HEX);
+}
+
+bool ServerManager_::enforceAuthentication(AsyncWebServerRequest* request) {
+    if (!isWebAuthEnabled()) {
+        return true;
+    }
+
+    if (isRequestAuthenticated(request)) {
+        return true;
+    }
+
+    request->send(401, "application/json", "{\"status\": \"unauthorized\"}");
+    return false;
 }
 
 IPAddress ServerManager_::setAPmode(String ssid, String psk) {
@@ -222,10 +265,62 @@ void ServerManager_::setupWebServer(IPAddress ip) {
 
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
     DefaultHeaders::Instance().addHeader("Access-Control-Allow-Methods", "GET, POST, PUT");
-    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type");
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Headers", "Content-Type, X-Auth-Token");
+
+    ws->on("/api/auth/status", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        String jsonResponse = "{\"enabled\": ";
+        jsonResponse += isWebAuthEnabled() ? "true" : "false";
+        jsonResponse += ", \"authenticated\": ";
+        jsonResponse += isRequestAuthenticated(request) ? "true" : "false";
+        jsonResponse += ", \"hasPassword\": ";
+        jsonResponse += SettingsManager.settings.web_auth_password.length() > 0 ? "true" : "false";
+        jsonResponse += "}";
+        request->send(200, "application/json", jsonResponse);
+    });
+
+    ws->addHandler(new AsyncCallbackJsonWebHandler(
+        "/api/auth/login", [this](AsyncWebServerRequest* request, JsonVariant& json) {
+            if (not json.is<JsonObject>()) {
+                request->send(400, "application/json", "{\"status\": \"json parsing error\"}");
+                return;
+            }
+            if (!isWebAuthEnabled()) {
+                request->send(200, "application/json", "{\"status\": \"disabled\"}");
+                return;
+            }
+
+            auto&& data = json.as<JsonObject>();
+            String username = data["username"].as<String>();
+            String password = data["password"].as<String>();
+            if (username != SettingsManager.settings.web_auth_username ||
+                password != SettingsManager.settings.web_auth_password) {
+                request->send(401, "application/json", "{\"status\": \"invalid\"}");
+                return;
+            }
+
+            webAuthToken = generateAuthToken();
+            String jsonResponse = "{\"status\": \"ok\", \"token\": \"" + webAuthToken + "\"}";
+            request->send(200, "application/json", jsonResponse);
+        }));
+
+    ws->on("/api/auth/logout", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!isWebAuthEnabled()) {
+            request->send(200, "application/json", "{\"status\": \"disabled\"}");
+            return;
+        }
+        if (!isRequestAuthenticated(request)) {
+            request->send(401, "application/json", "{\"status\": \"unauthorized\"}");
+            return;
+        }
+        webAuthToken = "";
+        request->send(200, "application/json", "{\"status\": \"ok\"}");
+    });
 
     ws->addHandler(new AsyncCallbackJsonWebHandler(
         "/api/save", [this](AsyncWebServerRequest* request, JsonVariant& json) {
+            if (!enforceAuthentication(request)) {
+                return;
+            }
             if (not json.is<JsonObject>()) {
                 request->send(200, "application/json", "{\"status\": \"json parsing error\"}");
                 return;
@@ -240,6 +335,9 @@ void ServerManager_::setupWebServer(IPAddress ip) {
 
     ws->addHandler(new AsyncCallbackJsonWebHandler(
         "/api/alarm/custom", [](AsyncWebServerRequest* request, JsonVariant& json) {
+            if (!ServerManager.enforceAuthentication(request)) {
+                return;
+            }
             if (not json.is<JsonObject>()) {
                 request->send(400, "application/json", "{\"status\": \"json parsing error\"}");
                 return;
@@ -265,6 +363,9 @@ void ServerManager_::setupWebServer(IPAddress ip) {
 
     ws->addHandler(new AsyncCallbackJsonWebHandler(
         "/api/alarm", [this](AsyncWebServerRequest* request, JsonVariant& json) {
+            if (!enforceAuthentication(request)) {
+                return;
+            }
             if (not json.is<JsonObject>()) {
                 request->send(400, "application/json", "{\"status\": \"json parsing error\"}");
                 return;
@@ -286,7 +387,10 @@ void ServerManager_::setupWebServer(IPAddress ip) {
             }
         }));
 
-    ws->on("/api/reset", HTTP_POST, [](AsyncWebServerRequest* request) {
+    ws->on("/api/reset", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!enforceAuthentication(request)) {
+            return;
+        }
         request->send(200, "application/json", "{\"status\": \"ok\"}");
         delay(1000);
         LittleFS.end();
@@ -295,6 +399,9 @@ void ServerManager_::setupWebServer(IPAddress ip) {
 
     ws->addHandler(new AsyncCallbackJsonWebHandler(
         "/api/displaypower", [this](AsyncWebServerRequest* request, JsonVariant& json) {
+            if (!enforceAuthentication(request)) {
+                return;
+            }
             if (not json.is<JsonObject>()) {
                 request->send(400, "application/json", "{\"status\": \"json parsing error\"}");
                 return;
@@ -317,7 +424,10 @@ void ServerManager_::setupWebServer(IPAddress ip) {
             }
         }));
 
-    ws->on("/api/factory-reset", HTTP_POST, [](AsyncWebServerRequest* request) {
+    ws->on("/api/factory-reset", HTTP_POST, [this](AsyncWebServerRequest* request) {
+        if (!enforceAuthentication(request)) {
+            return;
+        }
         request->send(200, "application/json", "{\"status\": \"ok\"}");
         delay(1000);
         SettingsManager.factoryReset();
